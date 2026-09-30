@@ -29,32 +29,82 @@ app = Flask(__name__)
 # Inicializar Telegram Application
 app_telegram = Application.builder().token(TELEGRAM_TOKEN).build()
 
-# Inicializamos el bot al arrancar el script
+# Inicializar bot al arrancar
 async def setup_telegram():
     await app_telegram.initialize()
     await app_telegram.start()
 
 asyncio.run(setup_telegram())
 
-# Función que procesa los mensajes del usuario
+# Diccionario oficial de Presupuestos 2026 (Mensual y Anual)
+PRESUPUESTOS_2026 = {
+    "Supermercados + frutería + carnicería": {"mensual": 800.00, "anual": 9600.00},
+    "Prestamo coche": {"mensual": 525.83, "anual": 6309.96},
+    "Ocio Jorge y Paloma (juntos los fines de semana)": {"mensual": 336.00, "anual": 4032.00},
+    "Viaje anual 1 semana": {"mensual": 250.00, "anual": 3000.00},
+    "Limpieza": {"mensual": 240.00, "anual": 2880.00},
+    "Reparaciones Cortes": {"mensual": 120.00, "anual": 1440.00},
+    "Gastos trabajo Jorge": {"mensual": 96.25, "anual": 962.50},
+    "Gastos médicos, incluye dentista y medicamentos de todo tipo": {"mensual": 125.00, "anual": 1500.00},
+    "Estética y otros Paloma": {"mensual": 125.00, "anual": 1500.00},
+    "Reparaciones Massalfassar": {"mensual": 100.00, "anual": 1200.00},
+    "Otros": {"mensual": 50.00, "anual": 600.00},
+    "Seguridad Social": {"mensual": 83.50, "anual": 1002.00},
+    "Gas Massalfassar": {"mensual": 100.00, "anual": 1200.00},
+    "Sueldo Álvaro": {"mensual": 126.00, "anual": 1512.00},
+    "Inglés Álvaro": {"mensual": 90.00, "anual": 900.00},
+    "Ropa Paloma": {"mensual": 100.00, "anual": 1200.00},
+    "Ropa Álvaro": {"mensual": 75.00, "anual": 900.00},
+    "Gastos trabajo Paloma": {"mensual": 80.00, "anual": 960.00},
+    "Teléfonos, WIFI y TV": {"mensual": 70.00, "anual": 840.00},
+    "Psicólogo Álvaro": {"mensual": 40.00, "anual": 400.00},
+    "Regalos cumpleaños / navidad varios": {"mensual": 120.00, "anual": 1440.00},
+    "Seguro BYD": {"mensual": 54.17, "anual": 650.00},
+    "Electricidad Massalfassar": {"mensual": 50.00, "anual": 600.00},
+    "Agua Massalfassar": {"mensual": 50.00, "anual": 600.00},
+    "Electricidad Cortes": {"mensual": 50.00, "anual": 600.00},
+    "Gasolina Jorge": {"mensual": 50.00, "anual": 600.00},
+    "Ropa Jorge": {"mensual": 50.00, "anual": 600.00},
+    "IBI Massalfassar": {"mensual": 32.00, "anual": 384.00},
+    "Peluquería Alvaro y Adrian": {"mensual": 30.00, "anual": 360.00},
+    "Ropa Adrián": {"mensual": 50.00, "anual": 600.00},
+    "Música Adrián": {"mensual": 70.00, "anual": 840.00},
+    "Comunidad Massalfassar": {"mensual": 20.00, "anual": 240.00},
+    "IBI Cortes": {"mensual": 18.70, "anual": 224.40},
+    "Seguro casa Massalfassar": {"mensual": 25.00, "anual": 300.00},
+    "Seguro casa Cortes": {"mensual": 20.00, "anual": 240.00},
+    "Basura Massalfassar": {"mensual": 15.00, "anual": 180.00},
+    "Peluqueria Jorge": {"mensual": 15.00, "anual": 180.00},
+    "Ropa deporte Álvaro": {"mensual": 20.00, "anual": 240.00},
+    "Material escolar Álvaro": {"mensual": 15.00, "anual": 180.00},
+    "Transporte Álvaro": {"mensual": 20.00, "anual": 240.00},
+    "Basura Cortes": {"mensual": 10.00, "anual": 120.00}
+}
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto_usuario = update.message.text
     chat_id = update.message.chat_id
     fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+    mes_actual = datetime.now().strftime("%Y-%m") # Ej: "2026-09"
+    anio_actual = datetime.now().strftime("%Y")   # Ej: "2026"
 
-    # Prompt ultra estructurado para asegurar un JSON impecable
+    lista_categorias_str = "\n".join([f"- {cat}" for cat in PRESUPUESTOS_2026.keys()])
+
     prompt = f"""
-    Eres un asistente contable. Analiza el siguiente texto de gasto: "{texto_usuario}"
-    Devuelve un JSON estrictamente con estas 6 claves y tipos de datos:
+    Eres un director financiero experto. Analiza el siguiente texto de gasto de un usuario: "{texto_usuario}"
+    
+    Debes clasificar el gasto eligiendo OBLIGATORIAMENTE una de las siguientes categorías exactas de la lista:
+    {lista_categorias_str}
+
+    Devuelve un JSON estrictamente con estas 6 claves:
     {{
       "fecha": "{fecha_hoy}",
       "miembro": "Jorge",
       "importe": 0.0,
       "metodo_pago": "Tarjeta",
-      "categoria": "Otros",
+      "categoria": "Una de la lista anterior",
       "concepto": "{texto_usuario}"
     }}
-    Rellena los valores correctamente extrayéndolos del texto. Si falta el importe, pon 0. Si falta el método de pago, pon Tarjeta. Si falta el miembro, pon Jorge.
     """
 
     try:
@@ -72,12 +122,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         datos = json.loads(resultado_json)
 
-        # Forzar valores limpios y orden estricto para las 6 columnas:
-        # A: Fecha, B: Miembro, C: Importe, D: Metodo_pago, E: Categoría, F: Concepto
         val_fecha = str(datos.get("fecha", fecha_hoy))
         val_miembro = str(datos.get("miembro", "Jorge"))
         
-        # Asegurar que el importe sea un número limpio
         try:
             val_importe = float(datos.get("importe", 0))
         except:
@@ -87,18 +134,61 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         val_cat = str(datos.get("categoria", "Otros"))
         val_concepto = str(datos.get("concepto", texto_usuario))
 
+        # 1. Guardar en Google Sheets (Columnas A a F)
         fila = [val_fecha, val_miembro, val_importe, val_metodo, val_cat, val_concepto]
         worksheet.append_row(fila)
 
-        # Confirmación por Telegram
+        # 2. Calcular acumulados de la categoría leída desde Google Sheets para el presupuesto
+        registros = worksheet.get_all_records()
+        gastado_mes = 0.0
+        gastado_anual = 0.0
+
+        for reg in registros:
+            # Intentamos leer fecha, categoría e importe de cada fila existente
+            f_reg = str(reg.get("Fecha", ""))
+            c_reg = str(reg.get("Categoría", ""))
+            if c_reg.strip().lower() == val_cat.strip().lower():
+                try:
+                    imp_reg = float(reg.get("Importe", 0))
+                except:
+                    imp_reg = 0.0
+                
+                # Sumar si coincide el año
+                if f_reg.startswith(anio_actual):
+                    gastado_anual += imp_reg
+                # Sumar si coincide el mes exacto
+                if f_reg.startswith(mes_actual):
+                    gastado_mes += imp_reg
+
+        # Añadir también el gasto actual recién metido que acabamos de calcular para que sea exacto en tiempo real
+        # (por si get_all_records tarda un microsegundo en actualizarse)
+        # Como worksheet.append_row ya lo ha metido, get_all_records ya lo incluye.
+
+        # 3. Buscar límites presupuestarios
+        presupuesto_info = PRESUPUESTOS_2026.get(val_cat, {"mensual": 50.0, "anual": 600.0})
+        limite_mensual = presupuesto_info["mensual"]
+        limite_anual = presupuesto_info["anual"]
+
+        remanente_mensual = limite_mensual - gastado_mes
+        remanente_anual = limite_anual - gastado_anual
+
+        # 4. Construir respuesta detallada para Telegram
+        estado_mes_emoji = "🟢" if remanente_mensual >= 0 else "🔴"
+        estado_anual_emoji = "🟢" if remanente_anual >= 0 else "🔴"
+
         respuesta_texto = (
-            f"✅ **Gasto registrado**\n"
+            f"✅ **Gasto registrado con éxito**\n\n"
             f"• **Fecha:** {val_fecha}\n"
             f"• **Miembro:** {val_miembro}\n"
-            f"• **Importe:** {val_importe} €\n"
+            f"• **Importe:** {val_importe:.2f} €\n"
             f"• **Método:** {val_metodo}\n"
             f"• **Categoría:** {val_cat}\n"
-            f"• **Concepto:** {val_concepto}"
+            f"• **Concepto:** {val_concepto}\n\n"
+            f"📊 **Estado Presupuestario ({val_cat}):**\n"
+            f"• **Mes ({mes_actual}):** Gastado {gastado_mes:.2f}€ / Límite {limite_mensual:.2f}€\n"
+            f"  Restante mes: {estado_mes_emoji} **{remanente_mensual:.2f} €**\n"
+            f"• **Año ({anio_actual}):** Gastado {gastado_anual:.2f}€ / Límite {limite_anual:.2f}€\n"
+            f"  Restante anual: {estado_anual_emoji} **{remanente_anual:.2f} €**"
         )
         await context.bot.send_message(chat_id=chat_id, text=respuesta_texto, parse_mode="Markdown")
 
