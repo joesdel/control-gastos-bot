@@ -6,6 +6,7 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import gspread
 import json
 import openai
+from datetime import datetime
 
 # 1. Cargar variables de entorno
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -40,16 +41,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto_usuario = update.message.text
     chat_id = update.message.chat_id
 
-    # 1. Usar OpenAI para extraer los datos estructurados del gasto
-    prompt = f"""
-    Extrae de la siguiente frase de gasto los siguientes datos en formato JSON:
-    - "fecha" (si no se especifica, pon la de hoy o déjala vacía)
-    - "concepto" (descripción breve)
-    - "categoria" (ej: Alimentación, Casa, Ocio, Transporte, etc.)
-    - "importe" (número con decimales si procede)
+    # Fecha de hoy por defecto en formato YYYY-MM-DD
+    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
 
-    Frase: "{texto_usuario}"
-    Devuelve estrictamente un objeto JSON válido con las claves: fecha, concepto, categoria, importe.
+    # 1. Usar OpenAI para extraer todos los campos de tus 6 columnas de forma inteligente
+    prompt = f"""
+    Eres un director financiero inteligente. Extrae de la siguiente frase de gasto los siguientes datos en formato JSON estricto:
+    - "fecha": (Si no se especifica otra fecha en el texto, usa exactamente "{fecha_hoy}").
+    - "miembro": (Quién hace el gasto, ej: Jorge, Paloma, etc. Si no se especifica, pon "Jorge" por defecto o déjalo vacío).
+    - "importe": (Número con decimales si procede, solo el número).
+    - "metodo_pago": (Ej: Tarjeta, Efectivo, Bizum, etc. Si no se especifica, pon "Tarjeta").
+    - "categoria": (Ej: Alimentación, Casa, Ocio, Transporte, Gastos Trabajo, Otros, etc.).
+    - "concepto": (Descripción breve de qué es el gasto).
+
+    Frase del usuario: "{texto_usuario}"
+    
+    Devuelve estrictamente un objeto JSON válido con estas claves exactas: fecha, miembro, importe, metodo_pago, categoria, concepto.
     """
 
     try:
@@ -68,21 +75,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         datos = json.loads(resultado_json)
 
-        # 2. Guardar en Google Sheets
+        # 2. Guardar en Google Sheets respetando estrictamente el orden de tus columnas:
+        # A: Fecha, B: Miembro, C: Importe, D: Metodo_pago, E: Categoría, F: Concepto
         fila = [
-            datos.get("fecha", ""),
-            datos.get("concepto", ""),
-            datos.get("categoria", ""),
-            datos.get("importe", 0)
+            datos.get("fecha", fecha_hoy),
+            datos.get("miembro", "Jorge"),
+            datos.get("importe", 0),
+            datos.get("metodo_pago", "Tarjeta"),
+            datos.get("categoria", "Otros"),
+            datos.get("concepto", texto_usuario)
         ]
         worksheet.append_row(fila)
 
-        # 3. Confirmar al usuario por Telegram
+        # 3. Confirmar al usuario por Telegram de forma limpia y detallada
         respuesta_texto = (
-            f"✅ **Gasto registrado con éxito**\n"
-            f"• Concepto: {datos.get('concepto')}\n"
-            f"• Categoría: {datos.get('categoria')}\n"
-            f"• Importe: {datos.get('importe')} €"
+            f"✅ **Gasto registrado correctamente**\n"
+            f"• **Fecha:** {datos.get('fecha')}\n"
+            f"• **Miembro:** {datos.get('miembro')}\n"
+            f"• **Importe:** {datos.get('importe')} €\n"
+            f"• **Método:** {datos.get('metodo_pago')}\n"
+            f"• **Categoría:** {datos.get('categoria')}\n"
+            f"• **Concepto:** {datos.get('concepto')}"
         )
         await context.bot.send_message(chat_id=chat_id, text=respuesta_texto, parse_mode="Markdown")
 
