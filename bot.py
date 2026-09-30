@@ -29,7 +29,7 @@ app = Flask(__name__)
 # Inicializar Telegram Application
 app_telegram = Application.builder().token(TELEGRAM_TOKEN).build()
 
-# Inicializamos el bot al arrancar el script para que esté listo desde el primer segundo
+# Inicializamos el bot al arrancar el script
 async def setup_telegram():
     await app_telegram.initialize()
     await app_telegram.start()
@@ -40,23 +40,21 @@ asyncio.run(setup_telegram())
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto_usuario = update.message.text
     chat_id = update.message.chat_id
-
-    # Fecha de hoy por defecto en formato YYYY-MM-DD
     fecha_hoy = datetime.now().strftime("%Y-%m-%d")
 
-    # 1. Usar OpenAI para extraer todos los campos de tus 6 columnas de forma inteligente
+    # Prompt ultra estructurado para asegurar un JSON impecable
     prompt = f"""
-    Eres un director financiero inteligente. Extrae de la siguiente frase de gasto los siguientes datos en formato JSON estricto:
-    - "fecha": (Si no se especifica otra fecha en el texto, usa exactamente "{fecha_hoy}").
-    - "miembro": (Quién hace el gasto, ej: Jorge, Paloma, etc. Si no se especifica, pon "Jorge" por defecto o déjalo vacío).
-    - "importe": (Número con decimales si procede, solo el número).
-    - "metodo_pago": (Ej: Tarjeta, Efectivo, Bizum, etc. Si no se especifica, pon "Tarjeta").
-    - "categoria": (Ej: Alimentación, Casa, Ocio, Transporte, Gastos Trabajo, Otros, etc.).
-    - "concepto": (Descripción breve de qué es el gasto).
-
-    Frase del usuario: "{texto_usuario}"
-    
-    Devuelve estrictamente un objeto JSON válido con estas claves exactas: fecha, miembro, importe, metodo_pago, categoria, concepto.
+    Eres un asistente contable. Analiza el siguiente texto de gasto: "{texto_usuario}"
+    Devuelve un JSON estrictamente con estas 6 claves y tipos de datos:
+    {{
+      "fecha": "{fecha_hoy}",
+      "miembro": "Jorge",
+      "importe": 0.0,
+      "metodo_pago": "Tarjeta",
+      "categoria": "Otros",
+      "concepto": "{texto_usuario}"
+    }}
+    Rellena los valores correctamente extrayéndolos del texto. Si falta el importe, pon 0. Si falta el método de pago, pon Tarjeta. Si falta el miembro, pon Jorge.
     """
 
     try:
@@ -67,7 +65,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         resultado_json = response.choices[0].message.content.strip()
         
-        # Limpiar posibles bloques de código markdown en la respuesta de OpenAI
         if resultado_json.startswith("```json"):
             resultado_json = resultado_json[7:-3].strip()
         elif resultado_json.startswith("```"):
@@ -75,42 +72,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         datos = json.loads(resultado_json)
 
-        # 2. Guardar en Google Sheets respetando estrictamente el orden de tus columnas:
+        # Forzar valores limpios y orden estricto para las 6 columnas:
         # A: Fecha, B: Miembro, C: Importe, D: Metodo_pago, E: Categoría, F: Concepto
-        fila = [
-            datos.get("fecha", fecha_hoy),
-            datos.get("miembro", "Jorge"),
-            datos.get("importe", 0),
-            datos.get("metodo_pago", "Tarjeta"),
-            datos.get("categoria", "Otros"),
-            datos.get("concepto", texto_usuario)
-        ]
+        val_fecha = str(datos.get("fecha", fecha_hoy))
+        val_miembro = str(datos.get("miembro", "Jorge"))
+        
+        # Asegurar que el importe sea un número limpio
+        try:
+            val_importe = float(datos.get("importe", 0))
+        except:
+            val_importe = 0.0
+
+        val_metodo = str(datos.get("metodo_pago", "Tarjeta"))
+        val_cat = str(datos.get("categoria", "Otros"))
+        val_concepto = str(datos.get("concepto", texto_usuario))
+
+        fila = [val_fecha, val_miembro, val_importe, val_metodo, val_cat, val_concepto]
         worksheet.append_row(fila)
 
-        # 3. Confirmar al usuario por Telegram de forma limpia y detallada
+        # Confirmación por Telegram
         respuesta_texto = (
-            f"✅ **Gasto registrado correctamente**\n"
-            f"• **Fecha:** {datos.get('fecha')}\n"
-            f"• **Miembro:** {datos.get('miembro')}\n"
-            f"• **Importe:** {datos.get('importe')} €\n"
-            f"• **Método:** {datos.get('metodo_pago')}\n"
-            f"• **Categoría:** {datos.get('categoria')}\n"
-            f"• **Concepto:** {datos.get('concepto')}"
+            f"✅ **Gasto registrado**\n"
+            f"• **Fecha:** {val_fecha}\n"
+            f"• **Miembro:** {val_miembro}\n"
+            f"• **Importe:** {val_importe} €\n"
+            f"• **Método:** {val_metodo}\n"
+            f"• **Categoría:** {val_cat}\n"
+            f"• **Concepto:** {val_concepto}"
         )
         await context.bot.send_message(chat_id=chat_id, text=respuesta_texto, parse_mode="Markdown")
 
     except Exception as e:
         await context.bot.send_message(chat_id=chat_id, text=f"Hubo un error procesando el gasto: {str(e)}")
 
-# Registrar el manejador de mensajes en Telegram
+# Registrar manejador
 app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Ruta principal de comprobación web
 @app.route("/", methods=["GET"])
 def index():
     return "Bot de Gastos Activo y en Línea", 200
 
-# Ruta del Webhook que recibe las peticiones de Telegram
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 def webhook():
     if request.method == "POST":
