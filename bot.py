@@ -25,49 +25,50 @@ worksheet = sh.get_worksheet(0)
 # Inicializar Flask
 app = Flask(__name__)
 
-# Diccionario oficial de Presupuestos 2026
+# Diccionario oficial de Presupuestos 2026 y Remanentes de partida a 01/10/2026
+# (Incluye el límite anual oficial y el remanente exacto con el que arranca el último trimestre)
 PRESUPUESTOS_2026 = {
-    "Supermercados + frutería + carnicería": {"mensual": 800.00, "anual": 9600.00},
-    "Prestamo coche": {"mensual": 525.83, "anual": 6309.96},
-    "Ocio Jorge y Paloma (juntos los fines de semana)": {"mensual": 336.00, "anual": 4032.00},
-    "Viaje anual 1 semana": {"mensual": 250.00, "anual": 3000.00},
-    "Limpieza": {"mensual": 240.00, "anual": 2880.00},
-    "Reparaciones Cortes": {"mensual": 120.00, "anual": 1440.00},
-    "Gastos trabajo Jorge": {"mensual": 96.25, "anual": 962.50},
-    "Gastos médicos, incluye dentista y medicamentos de todo tipo": {"mensual": 125.00, "anual": 1500.00},
-    "Estética y otros Paloma": {"mensual": 125.00, "anual": 1500.00},
-    "Reparaciones Massalfassar": {"mensual": 100.00, "anual": 1200.00},
-    "Otros": {"mensual": 50.00, "anual": 600.00},
-    "Seguridad Social": {"mensual": 83.50, "anual": 1002.00},
-    "Gas Massalfassar": {"mensual": 100.00, "anual": 1200.00},
-    "Sueldo Álvaro": {"mensual": 126.00, "anual": 1512.00},
-    "Inglés Álvaro": {"mensual": 90.00, "anual": 900.00},
-    "Ropa Paloma": {"mensual": 100.00, "anual": 1200.00},
-    "Ropa Álvaro": {"mensual": 75.00, "anual": 900.00},
-    "Gastos trabajo Paloma": {"mensual": 80.00, "anual": 960.00},
-    "Teléfonos, WIFI y TV": {"mensual": 70.00, "anual": 840.00},
-    "Psicólogo Álvaro": {"mensual": 40.00, "anual": 400.00},
-    "Regalos cumpleaños / navidad varios": {"mensual": 120.00, "anual": 1440.00},
-    "Seguro BYD": {"mensual": 54.17, "anual": 650.00},
-    "Electricidad Massalfassar": {"mensual": 50.00, "anual": 600.00},
-    "Agua Massalfassar": {"mensual": 50.00, "anual": 600.00},
-    "Electricidad Cortes": {"mensual": 50.00, "anual": 600.00},
-    "Gasolina Jorge": {"mensual": 50.00, "anual": 600.00},
-    "Ropa Jorge": {"mensual": 50.00, "anual": 600.00},
-    "IBI Massalfassar": {"mensual": 32.00, "anual": 384.00},
-    "Peluquería Alvaro y Adrian": {"mensual": 30.00, "anual": 360.00},
-    "Ropa Adrián": {"mensual": 50.00, "anual": 600.00},
-    "Música Adrián": {"mensual": 70.00, "anual": 840.00},
-    "Comunidad Massalfassar": {"mensual": 20.00, "anual": 240.00},
-    "IBI Cortes": {"mensual": 18.70, "anual": 224.40},
-    "Seguro casa Massalfassar": {"mensual": 25.00, "anual": 300.00},
-    "Seguro casa Cortes": {"mensual": 20.00, "anual": 240.00},
-    "Basura Massalfassar": {"mensual": 15.00, "anual": 180.00},
-    "Peluqueria Jorge": {"mensual": 15.00, "anual": 180.00},
-    "Ropa deporte Álvaro": {"mensual": 20.00, "anual": 240.00},
-    "Material escolar Álvaro": {"mensual": 15.00, "anual": 180.00},
-    "Transporte Álvaro": {"mensual": 20.00, "anual": 240.00},
-    "Basura Cortes": {"mensual": 10.00, "anual": 120.00}
+    "Supermercados + frutería + carnicería": {"mensual": 800.00, "anual": 9600.00, "remanente_octubre": 2400.00},
+    "Prestamo coche": {"mensual": 525.83, "anual": 6309.96, "remanente_octubre": 1577.49},
+    "Ocio Jorge y Paloma (juntos los fines de semana)": {"mensual": 336.00, "anual": 4032.00, "remanente_octubre": 1008.00},
+    "Viaje anual 1 semana": {"mensual": 250.00, "anual": 3000.00, "remanente_octubre": 1500.00},
+    "Limpieza": {"mensual": 240.00, "anual": 2880.00, "remanente_octubre": 720.00},
+    "Reparaciones Cortes": {"mensual": 120.00, "anual": 1440.00, "remanente_octubre": 300.00},
+    "Gastos trabajo Jorge": {"mensual": 96.25, "anual": 962.50, "remanente_octubre": 288.75},
+    "Gastos médicos, incluye dentista y medicamentos de todo tipo": {"mensual": 125.00, "anual": 1500.00, "remanente_octubre": 375.00},
+    "Estética y otros Paloma": {"mensual": 125.00, "anual": 1500.00, "remanente_octubre": 750.00},
+    "Reparaciones Massalfassar": {"mensual": 100.00, "anual": 1200.00, "remanente_octubre": 600.00},
+    "Otros": {"mensual": 50.00, "anual": 600.00, "remanente_octubre": 600.00},
+    "Seguridad Social": {"mensual": 83.50, "anual": 1002.00, "remanente_octubre": 250.50},
+    "Gas Massalfassar": {"mensual": 100.00, "anual": 1200.00, "remanente_octubre": 300.00},
+    "Sueldo Álvaro": {"mensual": 126.00, "anual": 1512.00, "remanente_octubre": 378.00},
+    "Inglés Álvaro": {"mensual": 90.00, "anual": 900.00, "remanente_octubre": 0.00},
+    "Ropa Paloma": {"mensual": 100.00, "anual": 1200.00, "remanente_octubre": 300.00},
+    "Ropa Álvaro": {"mensual": 75.00, "anual": 900.00, "remanente_octubre": 225.00},
+    "Gastos trabajo Paloma": {"mensual": 80.00, "anual": 960.00, "remanente_octubre": 240.00},
+    "Teléfonos, WIFI y TV": {"mensual": 70.00, "anual": 840.00, "remanente_octubre": 210.00},
+    "Psicólogo Álvaro": {"mensual": 40.00, "anual": 400.00, "remanente_octubre": 120.00},
+    "Regalos cumpleaños / navidad varios": {"mensual": 120.00, "anual": 1440.00, "remanente_octubre": 1000.00},
+    "Seguro BYD": {"mensual": 54.17, "anual": 650.00, "remanente_octubre": 0.00},
+    "Electricidad Massalfassar": {"mensual": 50.00, "anual": 600.00, "remanente_octubre": 150.00},
+    "Agua Massalfassar": {"mensual": 50.00, "anual": 600.00, "remanente_octubre": 150.00},
+    "Electricidad Cortes": {"mensual": 50.00, "anual": 600.00, "remanente_octubre": 150.00},
+    "Gasolina Jorge": {"mensual": 50.00, "anual": 600.00, "remanente_octubre": 150.00},
+    "Ropa Jorge": {"mensual": 50.00, "anual": 600.00, "remanente_octubre": 150.00},
+    "IBI Massalfassar": {"mensual": 32.00, "anual": 384.00, "remanente_octubre": 384.00},
+    "Peluquería Alvaro y Adrian": {"mensual": 30.00, "anual": 360.00, "remanente_octubre": 90.00},
+    "Ropa Adrián": {"mensual": 50.00, "anual": 600.00, "remanente_octubre": 150.00},
+    "Música Adrián": {"mensual": 70.00, "anual": 840.00, "remanente_octubre": 135.00},
+    "Comunidad Massalfassar": {"mensual": 20.00, "anual": 240.00, "remanente_octubre": 60.00},
+    "IBI Cortes": {"mensual": 18.70, "anual": 224.40, "remanente_octubre": 224.40},
+    "Seguro casa Massalfassar": {"mensual": 25.00, "anual": 300.00, "remanente_octubre": 300.00},
+    "Seguro casa Cortes": {"mensual": 20.00, "anual": 240.00, "remanente_octubre": 240.00},
+    "Basura Massalfassar": {"mensual": 15.00, "anual": 180.00, "remanente_octubre": 180.00},
+    "Peluqueria Jorge": {"mensual": 15.00, "anual": 180.00, "remanente_octubre": 45.00},
+    "Ropa deporte Álvaro": {"mensual": 20.00, "anual": 240.00, "remanente_octubre": 60.00},
+    "Material escolar Álvaro": {"mensual": 15.00, "anual": 180.00, "remanente_octubre": 45.00},
+    "Transporte Álvaro": {"mensual": 20.00, "anual": 240.00, "remanente_octubre": 60.00},
+    "Basura Cortes": {"mensual": 10.00, "anual": 120.00, "remanente_octubre": 0.00}
 }
 
 def enviar_mensaje_telegram(chat_id, texto):
@@ -131,10 +132,8 @@ def webhook():
             val_fecha = str(datos.get("fecha", fecha_hoy))
             val_miembro = str(datos.get("miembro", "Jorge"))
             
-            # Limpieza robusta del importe por si OpenAI devuelve string o formato raro
             raw_importe = datos.get("importe", 0)
             if isinstance(raw_importe, str):
-                # Limpiar caracteres que no sean números o comas/puntos
                 raw_importe = raw_importe.replace(",", ".")
                 nums = re.findall(r"[-+]?\d*\.\d+|\d+", raw_importe)
                 val_importe = float(nums[0]) if nums else 0.0
@@ -145,10 +144,19 @@ def webhook():
             val_cat = str(datos.get("categoria", "Otros"))
             val_concepto = str(datos.get("concepto", texto_usuario))
 
-            # 1. Leer registros previos para calcular acumulados reales de la hoja
+            # Obtener datos de presupuesto de la categoría seleccionada
+            presupuesto_info = PRESUPUESTOS_2026.get(val_cat, {"mensual": 50.0, "anual": 600.0, "remanente_octubre": 600.0})
+            limite_mensual = presupuesto_info["mensual"]
+            limite_anual = presupuesto_info["anual"]
+            remanente_octubre = presupuesto_info["remanente_octubre"]
+
+            # 1. Calcular lo gastado previamente de enero a septiembre (Diferencia entre el límite anual y el remanente de octubre)
+            gastado_enero_septiembre = limite_anual - remanente_octubre
+
+            # 2. Leer registros de la hoja para sumar los nuevos gastos introducidos a partir de octubre de 2026
             registros = worksheet.get_all_records()
-            gastado_mes = val_importe
-            gastado_anual = val_importe
+            gastado_desde_octubre_mes = val_importe
+            gastado_desde_octubre_anual = val_importe
 
             for reg in registros:
                 f_reg = str(reg.get("Fecha", ""))
@@ -159,19 +167,26 @@ def webhook():
                     except:
                         imp_reg = 0.0
                     
-                    if f_reg.startswith(anio_actual):
-                        gastado_anual += imp_reg
-                    if f_reg.startswith(mes_actual):
-                        gastado_mes += imp_reg
+                    # Si el registro es de octubre en adelante de 2026
+                    if f_reg >= "2026-10-01":
+                        if f_reg.startswith(anio_actual):
+                            gastado_desde_octubre_anual += imp_reg
+                        if f_reg.startswith(mes_actual):
+                            gastado_desde_octubre_mes += imp_reg
 
-            presupuesto_info = PRESUPUESTOS_2026.get(val_cat, {"mensual": 50.0, "anual": 600.0})
-            limite_mensual = presupuesto_info["mensual"]
-            limite_anual = presupuesto_info["anual"]
+            # Gasto anual total = lo gastado de enero a septiembre + lo gastado desde octubre
+            gastado_anual_total = gastado_enero_septiembre + gastado_desde_octubre_anual
+            
+            # Gasto mensual total (si estamos en octubre o posterior)
+            if mes_actual >= "2026-10":
+                gastado_mes_total = gastado_desde_octubre_mes
+            else:
+                gastado_mes_total = val_importe # Por si hubiera registros antiguos
 
-            remanente_mensual = limite_mensual - gastado_mes
-            remanente_anual = limite_anual - gastado_anual
+            remanente_anual = limite_anual - gastado_anual_total
+            remanente_mensual = limite_mensual - gastado_mes_total
 
-            # 2. Guardar en las 8 columnas exactas de tu Google Sheet (A a H)
+            # 3. Guardar en las 8 columnas exactas de tu Google Sheet (A a H)
             fila = [
                 val_fecha, 
                 val_miembro, 
@@ -184,7 +199,7 @@ def webhook():
             ]
             worksheet.append_row(fila)
 
-            # 3. Respuesta por Telegram
+            # 4. Respuesta por Telegram
             estado_mes_emoji = "🟢" if remanente_mensual >= 0 else "🔴"
             estado_anual_emoji = "🟢" if remanente_anual >= 0 else "🔴"
 
@@ -197,9 +212,9 @@ def webhook():
                 f"• *Categoría:* {val_cat}\n"
                 f"• *Concepto:* {val_concepto}\n\n"
                 f"📊 *Estado Presupuestario ({val_cat}):*\n"
-                f"• *Mes ({mes_actual}):* Gastado {gastado_mes:.2f}€ / Límite {limite_mensual:.2f}€\n"
+                f"• *Mes ({mes_actual}):* Gastado {gastado_mes_total:.2f}€ / Límite {limite_mensual:.2f}€\n"
                 f"  Queda mensual: {estado_mes_emoji} *{remanente_mensual:.2f} €*\n"
-                f"• *Año ({anio_actual}):* Gastado {gastado_anual:.2f}€ / Límite {limite_anual:.2f}€\n"
+                f"• *Año ({anio_actual}):* Gastado {gastado_anual_total:.2f}€ / Límite {limite_anual:.2f}€\n"
                 f"  Queda anual: {estado_anual_emoji} *{remanente_anual:.2f} €*"
             )
             enviar_mensaje_telegram(chat_id, respuesta_texto)
