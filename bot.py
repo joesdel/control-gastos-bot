@@ -5,6 +5,7 @@ import gspread
 import json
 import openai
 from datetime import datetime
+import re
 
 # 1. Cargar variables de entorno
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -96,11 +97,12 @@ def webhook():
         lista_categorias_str = "\n".join([f"- {cat}" for cat in PRESUPUESTOS_2026.keys()])
 
         prompt = f"""
-        Eres un director financiero experto. Analiza el siguiente texto de gasto: "{texto_usuario}"
-        Elige OBLIGATORIAMENTE una categoría exacta de esta lista oficial:
+        Eres un director financiero experto. Analiza el siguiente texto de gasto enviado por el usuario: "{texto_usuario}"
+        1. Extrae el importe numérico exacto (por ejemplo, si dice "20 euros" o "20€", el importe es 20.0). Si hay decimales, usa punto (ej. 15.50).
+        2. Elige OBLIGATORIAMENTE una categoría exacta de esta lista oficial:
         {lista_categorias_str}
 
-        Devuelve un JSON estrictamente con estas claves:
+        Devuelve un JSON estrictamente con este formato y sin texto adicional:
         {{
           "fecha": "{fecha_hoy}",
           "miembro": "Jorge",
@@ -129,16 +131,21 @@ def webhook():
             val_fecha = str(datos.get("fecha", fecha_hoy))
             val_miembro = str(datos.get("miembro", "Jorge"))
             
-            try:
-                val_importe = float(datos.get("importe", 0))
-            except:
-                val_importe = 0.0
+            # Limpieza robusta del importe por si OpenAI devuelve string o formato raro
+            raw_importe = datos.get("importe", 0)
+            if isinstance(raw_importe, str):
+                # Limpiar caracteres que no sean números o comas/puntos
+                raw_importe = raw_importe.replace(",", ".")
+                nums = re.findall(r"[-+]?\d*\.\d+|\d+", raw_importe)
+                val_importe = float(nums[0]) if nums else 0.0
+            else:
+                val_importe = float(raw_importe)
 
             val_metodo = str(datos.get("metodo_pago", "Tarjeta"))
             val_cat = str(datos.get("categoria", "Otros"))
             val_concepto = str(datos.get("concepto", texto_usuario))
 
-            # 1. Leer registros previos para calcular acumulados
+            # 1. Leer registros previos para calcular acumulados reales de la hoja
             registros = worksheet.get_all_records()
             gastado_mes = val_importe
             gastado_anual = val_importe
@@ -168,7 +175,7 @@ def webhook():
             fila = [
                 val_fecha, 
                 val_miembro, 
-                val_importe, 
+                round(val_importe, 2), 
                 val_metodo, 
                 val_cat, 
                 val_concepto, 
