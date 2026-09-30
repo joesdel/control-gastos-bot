@@ -36,7 +36,7 @@ async def setup_telegram():
 
 asyncio.run(setup_telegram())
 
-# Diccionario oficial de Presupuestos 2026 (Mensual y Anual)
+# Diccionario oficial de Presupuestos 2026
 PRESUPUESTOS_2026 = {
     "Supermercados + frutería + carnicería": {"mensual": 800.00, "anual": 9600.00},
     "Prestamo coche": {"mensual": 525.83, "anual": 6309.96},
@@ -85,24 +85,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto_usuario = update.message.text
     chat_id = update.message.chat_id
     fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-    mes_actual = datetime.now().strftime("%Y-%m") # Ej: "2026-09"
-    anio_actual = datetime.now().strftime("%Y")   # Ej: "2026"
+    mes_actual = datetime.now().strftime("%Y-%m")
+    anio_actual = datetime.now().strftime("%Y")
 
     lista_categorias_str = "\n".join([f"- {cat}" for cat in PRESUPUESTOS_2026.keys()])
 
     prompt = f"""
-    Eres un director financiero experto. Analiza el siguiente texto de gasto de un usuario: "{texto_usuario}"
-    
-    Debes clasificar el gasto eligiendo OBLIGATORIAMENTE una de las siguientes categorías exactas de la lista:
+    Eres un director financiero experto. Analiza el siguiente texto de gasto: "{texto_usuario}"
+    Elige OBLIGATORIAMENTE una categoría exacta de esta lista oficial:
     {lista_categorias_str}
 
-    Devuelve un JSON estrictamente con estas 6 claves:
+    Devuelve un JSON estrictamente con estas claves:
     {{
       "fecha": "{fecha_hoy}",
       "miembro": "Jorge",
       "importe": 0.0,
       "metodo_pago": "Tarjeta",
-      "categoria": "Una de la lista anterior",
+      "categoria": "Categoría exacta de la lista",
       "concepto": "{texto_usuario}"
     }}
     """
@@ -134,17 +133,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         val_cat = str(datos.get("categoria", "Otros"))
         val_concepto = str(datos.get("concepto", texto_usuario))
 
-        # 1. Guardar en Google Sheets (Columnas A a F)
-        fila = [val_fecha, val_miembro, val_importe, val_metodo, val_cat, val_concepto]
-        worksheet.append_row(fila)
-
-        # 2. Calcular acumulados de la categoría leída desde Google Sheets para el presupuesto
+        # 1. Leer registros previos para calcular acumulados en tiempo real
         registros = worksheet.get_all_records()
-        gastado_mes = 0.0
-        gastado_anual = 0.0
+        gastado_mes = val_importe
+        gastado_anual = val_importe
 
         for reg in registros:
-            # Intentamos leer fecha, categoría e importe de cada fila existente
             f_reg = str(reg.get("Fecha", ""))
             c_reg = str(reg.get("Categoría", ""))
             if c_reg.strip().lower() == val_cat.strip().lower():
@@ -153,18 +147,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except:
                     imp_reg = 0.0
                 
-                # Sumar si coincide el año
                 if f_reg.startswith(anio_actual):
                     gastado_anual += imp_reg
-                # Sumar si coincide el mes exacto
                 if f_reg.startswith(mes_actual):
                     gastado_mes += imp_reg
 
-        # Añadir también el gasto actual recién metido que acabamos de calcular para que sea exacto en tiempo real
-        # (por si get_all_records tarda un microsegundo en actualizarse)
-        # Como worksheet.append_row ya lo ha metido, get_all_records ya lo incluye.
-
-        # 3. Buscar límites presupuestarios
         presupuesto_info = PRESUPUESTOS_2026.get(val_cat, {"mensual": 50.0, "anual": 600.0})
         limite_mensual = presupuesto_info["mensual"]
         limite_anual = presupuesto_info["anual"]
@@ -172,12 +159,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         remanente_mensual = limite_mensual - gastado_mes
         remanente_anual = limite_anual - gastado_anual
 
-        # 4. Construir respuesta detallada para Telegram
+        # 2. Guardar en las 8 columnas de la tabla de Google Sheets:
+        # A: Fecha, B: Miembro, C: Importe, D: Metodo_pago, E: Categoría, F: Concepto, G: Queda mensual, H: Queda anual
+        fila = [
+            val_fecha, 
+            val_miembro, 
+            val_importe, 
+            val_metodo, 
+            val_cat, 
+            val_concepto, 
+            round(remanente_mensual, 2), 
+            round(remanente_anual, 2)
+        ]
+        worksheet.append_row(fila)
+
+        # 3. Respuesta en Telegram
         estado_mes_emoji = "🟢" if remanente_mensual >= 0 else "🔴"
         estado_anual_emoji = "🟢" if remanente_anual >= 0 else "🔴"
 
         respuesta_texto = (
-            f"✅ **Gasto registrado con éxito**\n\n"
+            f"✅ **Gasto registrado correctamente**\n\n"
             f"• **Fecha:** {val_fecha}\n"
             f"• **Miembro:** {val_miembro}\n"
             f"• **Importe:** {val_importe:.2f} €\n"
@@ -186,9 +187,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• **Concepto:** {val_concepto}\n\n"
             f"📊 **Estado Presupuestario ({val_cat}):**\n"
             f"• **Mes ({mes_actual}):** Gastado {gastado_mes:.2f}€ / Límite {limite_mensual:.2f}€\n"
-            f"  Restante mes: {estado_mes_emoji} **{remanente_mensual:.2f} €**\n"
+            f"  Queda mensual: {estado_mes_emoji} **{remanente_mensual:.2f} €**\n"
             f"• **Año ({anio_actual}):** Gastado {gastado_anual:.2f}€ / Límite {limite_anual:.2f}€\n"
-            f"  Restante anual: {estado_anual_emoji} **{remanente_anual:.2f} €**"
+            f"  Queda anual: {estado_anual_emoji} **{remanente_anual:.2f} €**"
         )
         await context.bot.send_message(chat_id=chat_id, text=respuesta_texto, parse_mode="Markdown")
 
