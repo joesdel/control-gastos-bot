@@ -28,6 +28,13 @@ app = Flask(__name__)
 # Inicializar Telegram Application
 app_telegram = Application.builder().token(TELEGRAM_TOKEN).build()
 
+# Inicializamos el bot al arrancar el script para que esté listo desde el primer segundo
+async def setup_telegram():
+    await app_telegram.initialize()
+    await app_telegram.start()
+
+asyncio.run(setup_telegram())
+
 # Función que procesa los mensajes del usuario
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto_usuario = update.message.text
@@ -97,8 +104,6 @@ def webhook():
         update = Update.de_json(request.get_json(force=True), app_telegram.bot)
         
         async def run_update():
-            if not app_telegram.running:
-                await app_telegram.initialize()
             await app_telegram.process_update(update)
 
         asyncio.run(run_update())
