@@ -105,7 +105,6 @@ def webhook():
         update = Update.de_json(request.get_json(force=True), app_telegram.bot)
         
         async def run_update():
-            # Inicializamos la aplicación si no lo está
             if not app_telegram.running:
                 await app_telegram.initialize()
             await app_telegram.process_update(update)
