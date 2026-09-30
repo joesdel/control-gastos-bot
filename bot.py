@@ -1,8 +1,6 @@
 import os
-import asyncio
 from flask import Flask, request
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+import requests
 import gspread
 import json
 import openai
@@ -25,19 +23,6 @@ worksheet = sh.get_worksheet(0)
 
 # Inicializar Flask
 app = Flask(__name__)
-
-# Inicializar Telegram Application
-app_telegram = Application.builder().token(TELEGRAM_TOKEN).build()
-
-# Inicializamos el bot al arrancar y mantenemos el loop activo
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
-def init_bot():
-    loop.run_until_complete(app_telegram.initialize())
-    loop.run_until_complete(app_telegram.start())
-
-init_bot()
 
 # Diccionario oficial de Presupuestos 2026
 PRESUPUESTOS_2026 = {
@@ -84,123 +69,14 @@ PRESUPUESTOS_2026 = {
     "Basura Cortes": {"mensual": 10.00, "anual": 120.00}
 }
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto_usuario = update.message.text
-    chat_id = update.message.chat_id
-    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-    mes_actual = datetime.now().strftime("%Y-%m")
-    anio_actual = datetime.now().strftime("%Y")
-
-    lista_categorias_str = "\n".join([f"- {cat}" for cat in PRESUPUESTOS_2026.keys()])
-
-    prompt = f"""
-    Eres un director financiero experto. Analiza el siguiente texto de gasto: "{texto_usuario}"
-    Elige OBLIGATORIAMENTE una categoría exacta de esta lista oficial:
-    {lista_categorias_str}
-
-    Devuelve un JSON estrictamente con estas claves:
-    {{
-      "fecha": "{fecha_hoy}",
-      "miembro": "Jorge",
-      "importe": 0.0,
-      "metodo_pago": "Tarjeta",
-      "categoria": "Categoría exacta de la lista",
-      "concepto": "{texto_usuario}"
-    }}
-    """
-
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
-        resultado_json = response.choices[0].message.content.strip()
-        
-        if resultado_json.startswith("```json"):
-            resultado_json = resultado_json[7:-3].strip()
-        elif resultado_json.startswith("```"):
-            resultado_json = resultado_json[3:-3].strip()
-
-        datos = json.loads(resultado_json)
-
-        val_fecha = str(datos.get("fecha", fecha_hoy))
-        val_miembro = str(datos.get("miembro", "Jorge"))
-        
-        try:
-            val_importe = float(datos.get("importe", 0))
-        except:
-            val_importe = 0.0
-
-        val_metodo = str(datos.get("metodo_pago", "Tarjeta"))
-        val_cat = str(datos.get("categoria", "Otros"))
-        val_concepto = str(datos.get("concepto", texto_usuario))
-
-        # 1. Leer registros previos para calcular acumulados en tiempo real
-        registros = worksheet.get_all_records()
-        gastado_mes = val_importe
-        gastado_anual = val_importe
-
-        for reg in registros:
-            f_reg = str(reg.get("Fecha", ""))
-            c_reg = str(reg.get("Categoría", ""))
-            if c_reg.strip().lower() == val_cat.strip().lower():
-                try:
-                    imp_reg = float(reg.get("Importe", 0))
-                except:
-                    imp_reg = 0.0
-                
-                if f_reg.startswith(anio_actual):
-                    gastado_anual += imp_reg
-                if f_reg.startswith(mes_actual):
-                    gastado_mes += imp_reg
-
-        presupuesto_info = PRESUPUESTOS_2026.get(val_cat, {"mensual": 50.0, "anual": 600.0})
-        limite_mensual = presupuesto_info["mensual"]
-        limite_anual = presupuesto_info["anual"]
-
-        remanente_mensual = limite_mensual - gastado_mes
-        remanente_anual = limite_anual - gastado_anual
-
-        # 2. Guardar en las 8 columnas exactas de tu Google Sheet:
-        # A: Fecha, B: Miembro, C: Importe, D: Metodo_pago, E: Categoría, F: Concepto, G: Queda mensual, H: Queda anual
-        fila = [
-            val_fecha, 
-            val_miembro, 
-            val_importe, 
-            val_metodo, 
-            val_cat, 
-            val_concepto, 
-            round(remanente_mensual, 2), 
-            round(remanente_anual, 2)
-        ]
-        worksheet.append_row(fila)
-
-        # 3. Respuesta en Telegram
-        estado_mes_emoji = "🟢" if remanente_mensual >= 0 else "🔴"
-        estado_anual_emoji = "🟢" if remanente_anual >= 0 else "🔴"
-
-        respuesta_texto = (
-            f"✅ **Gasto registrado correctamente**\n\n"
-            f"• **Fecha:** {val_fecha}\n"
-            f"• **Miembro:** {val_miembro}\n"
-            f"• **Importe:** {val_importe:.2f} €\n"
-            f"• **Método:** {val_metodo}\n"
-            f"• **Categoría:** {val_cat}\n"
-            f"• **Concepto:** {val_concepto}\n\n"
-            f"📊 **Estado Presupuestario ({val_cat}):**\n"
-            f"• **Mes ({mes_actual}):** Gastado {gastado_mes:.2f}€ / Límite {limite_mensual:.2f}€\n"
-            f"  Queda mensual: {estado_mes_emoji} **{remanente_mensual:.2f} €**\n"
-            f"• **Año ({anio_actual}):** Gastado {gastado_anual:.2f}€ / Límite {limite_anual:.2f}€\n"
-            f"  Queda anual: {estado_anual_emoji} **{remanente_anual:.2f} €**"
-        )
-        await context.bot.send_message(chat_id=chat_id, text=respuesta_texto, parse_mode="Markdown")
-
-    except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"Hubo un error procesando el gasto: {str(e)}")
-
-# Registrar manejador
-app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+def enviar_mensaje_telegram(chat_id, texto):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": texto,
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, json=payload)
 
 @app.route("/", methods=["GET"])
 def index():
@@ -208,11 +84,123 @@ def index():
 
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), app_telegram.bot)
-        # Reutilizamos el loop global en lugar de crear/cerrar uno nuevo
-        loop.run_until_complete(app_telegram.process_update(update))
-        return "ok", 200
+    data = request.get_json(force=True)
+    
+    if "message" in data and "text" in data["message"]:
+        chat_id = data["message"]["chat"]["id"]
+        texto_usuario = data["message"]["text"]
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        mes_actual = datetime.now().strftime("%Y-%m")
+        anio_actual = datetime.now().strftime("%Y")
+
+        lista_categorias_str = "\n".join([f"- {cat}" for cat in PRESUPUESTOS_2026.keys()])
+
+        prompt = f"""
+        Eres un director financiero experto. Analiza el siguiente texto de gasto: "{texto_usuario}"
+        Elige OBLIGATORIAMENTE una categoría exacta de esta lista oficial:
+        {lista_categorias_str}
+
+        Devuelve un JSON estrictamente con estas claves:
+        {{
+          "fecha": "{fecha_hoy}",
+          "miembro": "Jorge",
+          "importe": 0.0,
+          "metodo_pago": "Tarjeta",
+          "categoria": "Categoría exacta de la lista",
+          "concepto": "{texto_usuario}"
+        }}
+        """
+
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0
+            )
+            resultado_json = response.choices[0].message.content.strip()
+            
+            if resultado_json.startswith("```json"):
+                resultado_json = resultado_json[7:-3].strip()
+            elif resultado_json.startswith("```"):
+                resultado_json = resultado_json[3:-3].strip()
+
+            datos = json.loads(resultado_json)
+
+            val_fecha = str(datos.get("fecha", fecha_hoy))
+            val_miembro = str(datos.get("miembro", "Jorge"))
+            
+            try:
+                val_importe = float(datos.get("importe", 0))
+            except:
+                val_importe = 0.0
+
+            val_metodo = str(datos.get("metodo_pago", "Tarjeta"))
+            val_cat = str(datos.get("categoria", "Otros"))
+            val_concepto = str(datos.get("concepto", texto_usuario))
+
+            # 1. Leer registros previos para calcular acumulados
+            registros = worksheet.get_all_records()
+            gastado_mes = val_importe
+            gastado_anual = val_importe
+
+            for reg in registros:
+                f_reg = str(reg.get("Fecha", ""))
+                c_reg = str(reg.get("Categoría", ""))
+                if c_reg.strip().lower() == val_cat.strip().lower():
+                    try:
+                        imp_reg = float(reg.get("Importe", 0))
+                    except:
+                        imp_reg = 0.0
+                    
+                    if f_reg.startswith(anio_actual):
+                        gastado_anual += imp_reg
+                    if f_reg.startswith(mes_actual):
+                        gastado_mes += imp_reg
+
+            presupuesto_info = PRESUPUESTOS_2026.get(val_cat, {"mensual": 50.0, "anual": 600.0})
+            limite_mensual = presupuesto_info["mensual"]
+            limite_anual = presupuesto_info["anual"]
+
+            remanente_mensual = limite_mensual - gastado_mes
+            remanente_anual = limite_anual - gastado_anual
+
+            # 2. Guardar en las 8 columnas exactas de tu Google Sheet (A a H)
+            fila = [
+                val_fecha, 
+                val_miembro, 
+                val_importe, 
+                val_metodo, 
+                val_cat, 
+                val_concepto, 
+                round(remanente_mensual, 2), 
+                round(remanente_anual, 2)
+            ]
+            worksheet.append_row(fila)
+
+            # 3. Respuesta por Telegram
+            estado_mes_emoji = "🟢" if remanente_mensual >= 0 else "🔴"
+            estado_anual_emoji = "🟢" if remanente_anual >= 0 else "🔴"
+
+            respuesta_texto = (
+                f"✅ *Gasto registrado correctamente*\n\n"
+                f"• *Fecha:* {val_fecha}\n"
+                f"• *Miembro:* {val_miembro}\n"
+                f"• *Importe:* {val_importe:.2f} €\n"
+                f"• *Método:* {val_metodo}\n"
+                f"• *Categoría:* {val_cat}\n"
+                f"• *Concepto:* {val_concepto}\n\n"
+                f"📊 *Estado Presupuestario ({val_cat}):*\n"
+                f"• *Mes ({mes_actual}):* Gastado {gastado_mes:.2f}€ / Límite {limite_mensual:.2f}€\n"
+                f"  Queda mensual: {estado_mes_emoji} *{remanente_mensual:.2f} €*\n"
+                f"• *Año ({anio_actual}):* Gastado {gastado_anual:.2f}€ / Límite {limite_anual:.2f}€\n"
+                f"  Queda anual: {estado_anual_emoji} *{remanente_anual:.2f} €*"
+            )
+            enviar_mensaje_telegram(chat_id, respuesta_texto)
+
+        except Exception as e:
+            enviar_mensaje_telegram(chat_id, f"Hubo un error procesando el gasto: {str(e)}")
+
+    return "ok", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
