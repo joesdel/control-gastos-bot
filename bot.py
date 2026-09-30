@@ -29,12 +29,15 @@ app = Flask(__name__)
 # Inicializar Telegram Application
 app_telegram = Application.builder().token(TELEGRAM_TOKEN).build()
 
-# Inicializar bot al arrancar
-async def setup_telegram():
-    await app_telegram.initialize()
-    await app_telegram.start()
+# Inicializamos el bot al arrancar y mantenemos el loop activo
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
-asyncio.run(setup_telegram())
+def init_bot():
+    loop.run_until_complete(app_telegram.initialize())
+    loop.run_until_complete(app_telegram.start())
+
+init_bot()
 
 # Diccionario oficial de Presupuestos 2026
 PRESUPUESTOS_2026 = {
@@ -159,7 +162,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         remanente_mensual = limite_mensual - gastado_mes
         remanente_anual = limite_anual - gastado_anual
 
-        # 2. Guardar en las 8 columnas de la tabla de Google Sheets:
+        # 2. Guardar en las 8 columnas exactas de tu Google Sheet:
         # A: Fecha, B: Miembro, C: Importe, D: Metodo_pago, E: Categoría, F: Concepto, G: Queda mensual, H: Queda anual
         fila = [
             val_fecha, 
@@ -207,11 +210,8 @@ def index():
 def webhook():
     if request.method == "POST":
         update = Update.de_json(request.get_json(force=True), app_telegram.bot)
-        
-        async def run_update():
-            await app_telegram.process_update(update)
-
-        asyncio.run(run_update())
+        # Reutilizamos el loop global en lugar de crear/cerrar uno nuevo
+        loop.run_until_complete(app_telegram.process_update(update))
         return "ok", 200
 
 if __name__ == "__main__":
