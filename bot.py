@@ -13,7 +13,8 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 URL_HOJA = os.environ.get("URL_HOJA")
 GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON")
 
-# Nombre exacto de la pestaña de presupuestos en Google Sheets
+# Nombres exactos de las pestañas en Google Sheets
+NOMBRE_PESTANA_GASTOS = "Gastos"
 NOMBRE_PESTANA_PRESUPUESTO = "Presupuesto familiar 2026"
 
 # 2. Clientes
@@ -22,10 +23,10 @@ creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
 gc = gspread.service_account_from_dict(creds_dict)
 sh = gc.open_by_url(URL_HOJA)
 
-# Pestaña principal donde se registran los gastos diarios
-hoja_gastos = sh.get_worksheet(0)
+# Pestaña de registro de gastos diarios
+hoja_gastos = sh.worksheet(NOMBRE_PESTANA_GASTOS)
 
-# Respaldo de seguridad por si la pestaña no estuviera disponible en un momento dado
+# Respaldo de seguridad por si la pestaña de presupuesto no respondiera en un momento puntual
 FALLBACK_PRESUPUESTOS = {
     "Supermercados, Alimentación e Higiene": {"mensual": 1200.00, "anual": 14400.00, "regla": "Mercadona, Lidl, Charter, fruterías, carnicerías, limpieza/higiene."},
     "Ocio, Bares y Restaurantes (Jorge & Paloma)": {"mensual": 320.00, "anual": 3840.00, "regla": "Bares (ej. Bar Emiliano) y restaurantes de fin de semana."},
@@ -71,10 +72,9 @@ def obtener_presupuestos_desde_hoja():
 
         cabeceras = [c.strip().lower() for c in filas[0]]
 
-        # Localizar índices de columnas de forma flexible
         idx_cat = next((i for i, h in enumerate(cabeceras) if "concepto" in h or "categor" in h), 0)
         idx_mensual = next((i for i, h in enumerate(cabeceras) if "mensual" in h or "mes" in h), 1)
-        idx_anual = next((i for i, h in enumerate(cabeceras) if "anual" in h or "a" in h and "o" in h), 2)
+        idx_anual = next((i for i, h in enumerate(cabeceras) if "anual" in h or ("a" in h and "o" in h)), 2)
         idx_regla = next((i for i, h in enumerate(cabeceras) if "criterio" in h or "automat" in h or "regla" in h or "bot" in h), None)
 
         presupuestos = {}
@@ -117,7 +117,7 @@ def enviar_mensaje_telegram(chat_id, texto):
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Bot Control EscribaCarcel Activo (Leyendo Presupuesto familiar 2026)", 200
+    return "Bot Control EscribaCarcel Activo (Pestaña Gastos + Presupuesto familiar 2026)", 200
 
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 def webhook():
@@ -130,7 +130,6 @@ def webhook():
         mes_actual = datetime.now().strftime("%Y-%m")
         anio_actual = datetime.now().strftime("%Y")
 
-        # Cargar siempre los límites vigentes desde la pestaña de presupuesto
         presupuestos_activos = obtener_presupuestos_desde_hoja()
         cat_por_defecto = (
             "Menaje, Mobiliario, Gimnasio e Imprevistos"
